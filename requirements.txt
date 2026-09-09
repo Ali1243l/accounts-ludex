@@ -1,3 +1,2 @@
-streamlit
-selenium
-webdriver-manager
+selenium==4.18.1
+webdriver-manager==4.0.1

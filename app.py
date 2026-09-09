@@ -19,7 +19,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# تخصيص المظهر
 st.markdown("""
     <style>
     .main-title {
@@ -46,7 +45,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 1. إعداد متصفح Chrome بوضع الـ Headless المعتمد لسيرفرات السحاب
+# 1. إعداد متصفح Chrome المتوافق سحابياً
 # ==============================================================================
 def get_headless_driver():
     options = Options()
@@ -58,24 +57,30 @@ def get_headless_driver():
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
     
-    # سيلينيوم الحديث يدير المتصفح والمشغل تلقائياً بدون الحاجة لحزم apt
     driver = webdriver.Chrome(options=options)
     return driver
 
 # ==============================================================================
-# 2. دالة سحب رمز التحقق (IMAP)
+# 2. دالة استخراج رمز التحقق عبر IMAP مع تنظيف اسم السيرفر
 # ==============================================================================
+def clean_host(host_str):
+    # إزالة http:// أو https:// والمسارات الزائدة لتجنب خطأ الاتصال
+    h = re.sub(r'^https?://', '', host_str.strip())
+    h = h.split('/')[0]
+    return h
+
 def get_otp_from_imap(imap_server, imap_port, email_address, password, sender_email, otp_length=5, max_retries=15, delay_seconds=3, log_box=None):
+    clean_srv = clean_host(imap_server)
     if log_box:
-        log_box.write(f"📡 [IMAP] جاري الاتصال بالخادم `{imap_server}:{imap_port}` للحساب (`{email_address}`)...")
+        log_box.write(f"📡 [IMAP] الاتصال بالخادم `{clean_srv}:{imap_port}` للحساب (`{email_address}`)...")
 
     for attempt in range(1, max_retries + 1):
         try:
-            mail = imaplib.IMAP4_SSL(imap_server, int(imap_port))
+            mail = imaplib.IMAP4_SSL(clean_srv, int(imap_port))
             mail.login(email_address, password)
             mail.select('inbox')
 
-            status, messages = mail.search(None, f'(FROM "{sender_email}")')
+            status, messages = mail.search(None, f'(FROM "{sender_email}")') if sender_email.strip() else mail.search(None, 'ALL')
             
             if status == "OK" and messages[0]:
                 mail_ids = messages[0].split()
@@ -105,7 +110,7 @@ def get_otp_from_imap(imap_server, imap_port, email_address, password, sender_em
 
             mail.logout()
             if log_box:
-                log_box.write(f"⏳ محاولة ({attempt}/{max_retries}): الإيميل لم يصل بعد، جاري الانتظار {delay_seconds} ثوانٍ...")
+                log_box.write(f"⏳ محاولة ({attempt}/{max_retries}): الإيميل لم يصل بعد، انتظار {delay_seconds} ثوانٍ...")
             time.sleep(delay_seconds)
 
         except Exception as e:
@@ -220,7 +225,7 @@ with st.sidebar:
     st.header("⚙️ إعدادات مزود البريد (IMAP)")
     provider = st.selectbox(
         "اختر المزود:",
-        ["Outlook / Hotmail", "Gmail", "Yahoo", "سيرفر خاص (Custom)"]
+        ["سيرفر خاص (Custom)", "Outlook / Hotmail", "Gmail", "Yahoo"]
     )
 
     if provider == "Outlook / Hotmail":
@@ -230,12 +235,12 @@ with st.sidebar:
     elif provider == "Yahoo":
         def_server, def_port = "imap.mail.yahoo.com", 993
     else:
-        def_server, def_port = "mail.yourdomain.com", 993
+        def_server, def_port = "mail.xomail.club", 993
 
-    imap_server = st.text_input("IMAP Server Host", value=def_server)
+    imap_server = st.text_input("IMAP Server Host (بدون http://)", value=def_server)
     imap_port = st.number_input("IMAP Port", value=def_port, step=1)
-    imap_user = st.text_input("Email Address", value="your_email@outlook.com")
-    imap_pass = st.text_input("App Password", type="password", help="استخدم App Password لضمان تسجيل الدخول السحابي")
+    imap_user = st.text_input("Email Address", value="se889388@fknvzd81.icu")
+    imap_pass = st.text_input("App Password", type="password", help="كلمة مرور البريد")
     sender_filter = st.text_input("تصفية مرسل الكود (From)", value="noreply@steampowered.com")
     otp_len = st.number_input("عدد خانات الـ OTP", value=5, min_value=3, max_value=12)
 
@@ -243,16 +248,16 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("🌐 بيانات الموقع الأول (الأمان / المصدر)")
-    site1_url = st.text_input("رابط الموقع الأول (اختياري)", value="https://login.live.com")
-    site1_user = st.text_input("يوزر / إيميل الموقع الأول", value="security_account@outlook.com")
-    site1_pass = st.text_input("باسورد الموقع الأول", type="password", value="password123")
+    site1_url = st.text_input("رابط الموقع الأول (اختياري)", value="")
+    site1_user = st.text_input("يوزر / إيميل الموقع الأول", value="")
+    site1_pass = st.text_input("باسورد الموقع الأول", type="password", value="")
 
 with col2:
     st.subheader("🌐 بيانات الموقع الثاني (الأساسي للحسابات)")
     site2_url = st.text_input("رابط الموقع الأساسي", value="https://store.steampowered.com/login")
-    site2_user = st.text_input("اسم المستخدم (حقل r3)", value="main_username")
-    site2_pass = st.text_input("كلمة المرور (حقل r4)", type="password", value="main_password")
-    new_email = st.text_input("الإيميل الجديد للتغيير إليه", value="new_target_email@outlook.com")
+    site2_user = st.text_input("اسم المستخدم (حقل r3)", value="")
+    site2_pass = st.text_input("كلمة المرور (حقل r4)", type="password", value="")
+    new_email = st.text_input("الإيميل الجديد للتغيير إليه", value="")
 
 st.divider()
 

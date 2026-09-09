@@ -5,7 +5,6 @@ import re
 import time
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -47,7 +46,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 1. إعداد متصفح Chrome بوضع الـ Headless المعتمد لسيرفرات Streamlit Cloud
+# 1. إعداد متصفح Chrome بوضع الـ Headless المعتمد لسيرفرات السحاب
 # ==============================================================================
 def get_headless_driver():
     options = Options()
@@ -59,19 +58,8 @@ def get_headless_driver():
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
     
-    # تحديد مسار Chromium الافتراضي في سيرفرات لينكس
-    try:
-        options.binary_location = "/usr/bin/chromium"
-        service = Service("/usr/bin/chromedriver")
-        driver = webdriver.Chrome(service=service, options=options)
-    except Exception:
-        try:
-            options.binary_location = "/usr/bin/chromium-browser"
-            service = Service("/usr/lib/chromium-browser/chromedriver")
-            driver = webdriver.Chrome(service=service, options=options)
-        except Exception:
-            driver = webdriver.Chrome(options=options)
-            
+    # سيلينيوم الحديث يدير المتصفح والمشغل تلقائياً بدون الحاجة لحزم apt
+    driver = webdriver.Chrome(options=options)
     return driver
 
 # ==============================================================================

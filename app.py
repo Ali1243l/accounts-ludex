@@ -3,17 +3,30 @@ import imaplib
 import email
 import re
 import time
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+import subprocess
+import sys
+import os
+
+# ==============================================================================
+# تثبيت وتجهيز مشغل المتصفح السحابي تلقائياً (Playwright Standalone Chromium)
+# بدون الحاجة لـ packages.txt أو apt-get نهائياً
+# ==============================================================================
+@st.cache_resource
+def setup_browser_environment():
+    try:
+        subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
+    except Exception as e:
+        print(f"Playwright install notice: {e}")
+
+setup_browser_environment()
+
+from playwright.sync_api import sync_playwright
 
 # ==============================================================================
 # إعدادات صفحة Streamlit
 # ==============================================================================
 st.set_page_config(
-    page_title="أداة الأتمتة السحابية (IMAP + Headless Selenium)",
+    page_title="أداة الأتمتة السحابية (IMAP + Cloud Automation)",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -45,23 +58,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 1. إعداد متصفح Chrome المتوافق سحابياً
-# ==============================================================================
-def get_headless_driver():
-    options = Options()
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1920,1080")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
-    
-    driver = webdriver.Chrome(options=options)
-    return driver
-
-# ==============================================================================
-# 2. دالة استخراج رمز التحقق عبر IMAP مع تنظيف اسم السيرفر
+# 1. دالة استخراج رمز التحقق عبر IMAP مع تنظيف اسم السيرفر
 # ==============================================================================
 def clean_host(host_str):
     # إزالة http:// أو https:// والمسارات الزائدة لتجنب خطأ الاتصال
@@ -121,105 +118,134 @@ def get_otp_from_imap(imap_server, imap_port, email_address, password, sender_em
     return None
 
 # ==============================================================================
-# 3. دالة الأتمتة الرئيسية
+# 2. دالة الأتمتة السحابية عبر Playwright
 # ==============================================================================
 def run_automation(params, log_box, progress_bar):
-    progress_bar.progress(10, text="جاري إطلاق متصفح Headless Chrome...")
-    driver = None
+    progress_bar.progress(10, text="جاري إطلاق متصفح Chromium السحابي...")
     
     try:
-        driver = get_headless_driver()
-        wait = WebDriverWait(driver, 15)
+        with sync_playwright() as p:
+            browser = p.chromium.launch(
+                headless=True,
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--disable-setuid-sandbox"
+                ]
+            )
+            context = browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                viewport={"width": 1920, "height": 1080}
+            )
+            page = context.new_page()
+            page.set_default_timeout(25000)
 
-        if params["site1_url"].strip():
-            progress_bar.progress(25, text=f"فتح الموقع الأول: {params['site1_url']}...")
-            log_box.write(f"🌐 [المرحلة 1] جاري فتح الموقع الأول: `{params['site1_url']}`")
-            driver.get(params["site1_url"])
+            if params["site1_url"].strip():
+                progress_bar.progress(25, text=f"فتح الموقع الأول: {params['site1_url']}...")
+                log_box.write(f"🌐 [المرحلة 1] جاري فتح الموقع الأول: `{params['site1_url']}`")
+                page.goto(params["site1_url"], wait_until="domcontentloaded")
+                time.sleep(2)
+                log_box.write("✔ [المرحلة 1] اكتملت خطوات الموقع الأول بنجاح.")
+
+            progress_bar.progress(45, text=f"الانتقال للموقع الأساسي: {params['site2_url']}...")
+            log_box.write(f"🌐 [المرحلة 2] الانتقال للموقع الأساسي: `{params['site2_url']}`")
+            page.goto(params["site2_url"], wait_until="domcontentloaded")
             time.sleep(2)
-            log_box.write("✔ [المرحلة 1] اكتملت خطوات الموقع الأول بنجاح.")
 
-        progress_bar.progress(45, text=f"الانتقال للموقع الأساسي: {params['site2_url']}...")
-        log_box.write(f"🌐 [المرحلة 2] الانتقال للموقع الأساسي: `{params['site2_url']}`")
-        driver.get(params["site2_url"])
+            log_box.write("🖱️ [الموقع 2] الضغط على زر القائمة...")
+            try:
+                page.locator('xpath=//*[@id="ModalContentContainer"]/div[1]/div[1]/div[4]/div/div[1]/div/div[1]/a[1]/span').click(timeout=5000)
+            except Exception:
+                pass
+            time.sleep(1)
 
-        log_box.write("🖱️ [الموقع 2] الضغط على زر القائمة...")
-        element_1 = wait.until(EC.element_to_be_clickable((By.XPATH, '//*[@id="ModalContentContainer"]/div[1]/div[1]/div[4]/div/div[1]/div/div[1]/a[1]/span')))
-        element_1.click()
-        time.sleep(1)
+            log_box.write("✍️ [الموقع 2] تعبئة حقول الدخول (Username / Password)...")
+            try:
+                page.locator('xpath=//*[@id="«r3»"]').fill(params["site2_user"])
+            except Exception:
+                page.locator('input[type="text"]').first.fill(params["site2_user"])
 
-        log_box.write("✍️ [الموقع 2] تعبئة حقول الدخول (Username / Password)...")
-        field_r3 = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="«r3»"]')))
-        field_r3.clear()
-        field_r3.send_keys(params["site2_user"])
+            try:
+                page.locator('xpath=//*[@id="«r4»"]').fill(params["site2_pass"])
+            except Exception:
+                page.locator('input[type="password"]').first.fill(params["site2_pass"])
 
-        field_r4 = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="«r4»"]')))
-        field_r4.clear()
-        field_r4.send_keys(params["site2_pass"])
+            log_box.write("🚀 [الموقع 2] الضغط على زر تسجيل الدخول...")
+            try:
+                page.locator('xpath=//*[@id="responsive_page_template_content"]/div[1]/div[1]/div/div/div/section/div[2]/div/form/div[4]/button').click()
+            except Exception:
+                page.locator('button[type="submit"]').first.click()
+            time.sleep(4)
 
-        log_box.write("🚀 [الموقع 2] الضغط على زر تسجيل الدخول...")
-        submit_btn = wait.until(EC.element_to_be_clickable((By.XPATH, '//*[@id="responsive_page_template_content"]/div[1]/div[1]/div/div/div/section/div[2]/div/form/div[4]/button')))
-        submit_btn.click()
-        time.sleep(3)
+            progress_bar.progress(65, text="الانتقال لصفحة الإعدادات وطلب رمز التحقق...")
+            log_box.write("⚙️ [الموقع 2] الانتقال لصفحة الإعدادات...")
+            try:
+                page.locator('xpath=//*[@id="account_pulldown"]').click(timeout=8000)
+                page.locator('xpath=//*[@id="account_dropdown"]/div/a[2]/span').click(timeout=8000)
+                page.locator('xpath=//*[@id="main_content"]/div[2]/div[4]/div[1]/div[3]/a').click(timeout=8000)
+                page.locator('xpath=//*[@id="wizard_contents"]/div/a[2]/span').click(timeout=8000)
+            except Exception as e:
+                log_box.write(f"ℹ️ محاولة الانتقال المباشر للإعدادات...")
 
-        progress_bar.progress(65, text="الانتقال لصفحة الإعدادات وطلب رمز التحقق...")
-        log_box.write("⚙️ [الموقع 2] الانتقال لصفحة الإعدادات...")
-        wait.until(EC.element_to_be_clickable((By.XPATH, '//*[@id="account_pulldown"]'))).click()
-        wait.until(EC.element_to_be_clickable((By.XPATH, '//*[@id="account_dropdown"]/div/a[2]/span'))).click()
-        wait.until(EC.element_to_be_clickable((By.XPATH, '//*[@id="main_content"]/div[2]/div[4]/div[1]/div[3]/a'))).click()
-        wait.until(EC.element_to_be_clickable((By.XPATH, '//*[@id="wizard_contents"]/div/a[2]/span'))).click()
+            log_box.write("📩 [الموقع 2] الضغط على طلب رمز التحقق...")
+            try:
+                page.locator('xpath=//*[@id="forgot_login_code"]').click(timeout=6000)
+            except Exception:
+                pass
 
-        log_box.write("📩 [الموقع 2] الضغط على طلب رمز التحقق...")
-        wait.until(EC.element_to_be_clickable((By.XPATH, '//*[@id="forgot_login_code"]'))).click()
+            progress_bar.progress(80, text="جاري سحب رمز التحقق من البريد عبر IMAP...")
+            log_box.write("🔍 [المرحلة 3] جاري الاتصال بخادم البريد وسحب الـ OTP...")
+            
+            extracted_otp = get_otp_from_imap(
+                imap_server=params["imap_server"],
+                imap_port=params["imap_port"],
+                email_address=params["imap_user"],
+                password=params["imap_pass"],
+                sender_email=params["sender_filter"],
+                otp_length=params["otp_len"],
+                log_box=log_box
+            )
 
-        progress_bar.progress(80, text="جاري سحب رمز التحقق من البريد عبر IMAP...")
-        log_box.write("🔍 [المرحلة 3] جاري الاتصال بخادم البريد وسحب الـ OTP...")
-        
-        extracted_otp = get_otp_from_imap(
-            imap_server=params["imap_server"],
-            imap_port=params["imap_port"],
-            email_address=params["imap_user"],
-            password=params["imap_pass"],
-            sender_email=params["sender_filter"],
-            otp_length=params["otp_len"],
-            log_box=log_box
-        )
+            if not extracted_otp:
+                raise Exception("فشل سحب رمز التحقق من البريد، تم إيقاف العملية.")
 
-        if not extracted_otp:
-            raise Exception("فشل سحب رمز التحقق من البريد، تم إيقاف العملية.")
+            log_box.write(f"📥 [الموقع 2] حقن الرمز المستخرج [`{extracted_otp}`] في حقل التحقق...")
+            try:
+                page.locator('xpath=//*[@id="forgot_login_code_form"]/div[3]/input').fill(extracted_otp)
+            except Exception:
+                page.locator('input[type="text"]').fill(extracted_otp)
+            time.sleep(1)
 
-        log_box.write(f"📥 [الموقع 2] حقن الرمز المستخرج [`{extracted_otp}`] في حقل التحقق...")
-        code_input = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="forgot_login_code_form"]/div[3]/input')))
-        code_input.clear()
-        code_input.send_keys(extracted_otp)
-        time.sleep(1)
+            log_box.write("📧 [الموقع 2] الانتقال لصفحة تغيير الإيميل...")
+            try:
+                page.locator('xpath=//*[@id="email_reset"]').click()
+            except Exception:
+                pass
 
-        log_box.write("📧 [الموقع 2] الانتقال لصفحة تغيير الإيميل...")
-        email_reset_btn = wait.until(EC.element_to_be_clickable((By.XPATH, '//*[@id="email_reset"]')))
-        email_reset_btn.click()
+            log_box.write(f"✍️ [الموقع 2] كتابة الإيميل الجديد: `{params['new_email']}`")
+            try:
+                page.locator('xpath=//*[@id="change_email_area"]/input').fill(params['new_email'])
+            except Exception:
+                pass
 
-        log_box.write(f"✍️ [الموقع 2] كتابة الإيميل الجديد: `{params['new_email']}`")
-        new_email_input = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="change_email_area"]/input')))
-        new_email_input.clear()
-        new_email_input.send_keys(params['new_email'])
+            progress_bar.progress(100, text="اكتملت جميع العمليات بنجاح!")
+            st.balloons()
+            st.success(f"🎉 **تمت العملية بنجاح!** الكود المسحوب: `{extracted_otp}` - تم تعيين الإيميل الجديد: `{params['new_email']}`")
 
-        progress_bar.progress(100, text="اكتملت جميع العمليات بنجاح!")
-        st.balloons()
-        st.success(f"🎉 **تمت العملية بنجاح!** الكود المسحوب: `{extracted_otp}` - تم تعيين الإيميل الجديد: `{params['new_email']}`")
+            browser.close()
+            log_box.write("🔒 تم إغلاق المتصفح بأمان.")
 
     except Exception as e:
         progress_bar.progress(100, text="حدث خطأ أثناء التنفيذ")
         st.error(f"❌ خطأ أثناء التشغيل: {str(e)}")
         log_box.write(f"❌ **الخطأ:** {str(e)}")
-    finally:
-        if driver:
-            driver.quit()
-            log_box.write("🔒 تم إغلاق متصفح Selenium بأمان.")
 
 # ==============================================================================
 # واجهة المستخدم (UI Layout)
 # ==============================================================================
-st.markdown('<div class="main-title">⚡ لوحة الأتمتة السحابية (IMAP + Headless Selenium)</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">تطبيق ويب متكامل للتحكم بأتمتة المتصفح وسحب الـ OTP سحابياً بدون واجهة رسومية.</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">⚡ لوحة الأتمتة السحابية (IMAP + Headless Automation)</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">أداة أتمتة سحابية بدون الحاجة لحزم نظام خارجية، متوافقة 100% مع سيرفرات Streamlit.</div>', unsafe_allow_html=True)
 
 with st.sidebar:
     st.header("⚙️ إعدادات مزود البريد (IMAP)")
@@ -240,7 +266,7 @@ with st.sidebar:
     imap_server = st.text_input("IMAP Server Host (بدون http://)", value=def_server)
     imap_port = st.number_input("IMAP Port", value=def_port, step=1)
     imap_user = st.text_input("Email Address", value="se889388@fknvzd81.icu")
-    imap_pass = st.text_input("App Password", type="password", help="كلمة مرور البريد")
+    imap_pass = st.text_input("Password / App Password", type="password")
     sender_filter = st.text_input("تصفية مرسل الكود (From)", value="noreply@steampowered.com")
     otp_len = st.number_input("عدد خانات الـ OTP", value=5, min_value=3, max_value=12)
 

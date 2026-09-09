@@ -1,0 +1,6 @@
+{
+  "name": "OTP Verification Target",
+  "description": "A simple UI for testing OTP automation scripts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

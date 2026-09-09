@@ -4,18 +4,21 @@ import email
 import re
 import time
 import os
+import shutil
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
+from webdriver_manager.core.os_manager import ChromeType
 
 # ==============================================================================
 # إعدادات صفحة Streamlit
 # ==============================================================================
 st.set_page_config(
-    page_title="أداة الأتمتة السحابية (IMAP + Selenium Headless)",
+    page_title="أداة الأتمتة السحابية (IMAP + Headless Selenium)",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -47,7 +50,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 1. إعداد متصفح Chrome السحابي (Selenium Headless المتوافق مع Streamlit Cloud)
+# 1. إعداد متصفح Chrome السحابي التلقائي
 # ==============================================================================
 def get_headless_driver(log_box=None):
     options = Options()
@@ -55,39 +58,50 @@ def get_headless_driver(log_box=None):
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
-    options.add_argument("--disable-extensions")
     options.add_argument("--disable-setuid-sandbox")
+    options.add_argument("--disable-extensions")
     options.add_argument("--window-size=1920,1080")
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
-    
-    # فحص مسارات Chromium المثبتة عبر packages.txt في سيرفرات Linux السحابية
+
+    # فحص المسارات المتاحة أولاً
     candidate_paths = [
         ("/usr/bin/chromium", "/usr/bin/chromedriver"),
         ("/usr/bin/chromium-browser", "/usr/lib/chromium-browser/chromedriver"),
         ("/usr/bin/google-chrome", "/usr/bin/chromedriver")
     ]
-    
     for chromepath, driverpath in candidate_paths:
         if os.path.exists(chromepath) and os.path.exists(driverpath):
             if log_box:
-                log_box.write(f"✔ تم العثور على المتصفح السحابي: `{chromepath}` والمشغل: `{driverpath}`")
+                log_box.write(f"✔ استخدام متصفح النظام السحابي: `{chromepath}`")
             options.binary_location = chromepath
             service = Service(executable_path=driverpath)
             return webdriver.Chrome(service=service, options=options)
 
-    # في حال عدم وجود ملف packages.txt أو التشغيل المحلي
-    if log_box:
-        log_box.write("⚠️ لم يتم العثور على Chromium النظامي (`/usr/bin/chromium`)، جاري محاولة التشغيل المباشر...")
+    # التثبيت والإدارة التلقائية عبر webdriver_manager
+    try:
+        driver_path = ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install()
+        service = Service(driver_path)
+        return webdriver.Chrome(service=service, options=options)
+    except Exception:
+        pass
+
+    try:
+        driver_path = ChromeDriverManager().install()
+        service = Service(driver_path)
+        return webdriver.Chrome(service=service, options=options)
+    except Exception:
+        pass
+
+    # المحاولة الافتراضية المباشرة
     return webdriver.Chrome(options=options)
 
 # ==============================================================================
-# 2. دالة استخراج رمز التحقق عبر IMAP مع تنظيف اسم السيرفر
+# 2. استخراج رمز الـ OTP عبر IMAP
 # ==============================================================================
 def clean_host(host_str):
     h = re.sub(r'^https?://', '', host_str.strip())
-    h = h.split('/')[0]
-    return h
+    return h.split('/')[0]
 
 def get_otp_from_imap(imap_server, imap_port, email_address, password, sender_email, otp_length=5, max_retries=15, delay_seconds=3, log_box=None):
     clean_srv = clean_host(imap_server)
@@ -130,7 +144,7 @@ def get_otp_from_imap(imap_server, imap_port, email_address, password, sender_em
 
             mail.logout()
             if log_box:
-                log_box.write(f"⏳ محاولة ({attempt}/{max_retries}): الإيميل لم يصل بعد، انتظار {delay_seconds} ثوانٍ...")
+                log_box.write(f"⏳ محاولة ({attempt}/{max_retries}): انتظار وصول الكود {delay_seconds} ثوانٍ...")
             time.sleep(delay_seconds)
 
         except Exception as e:
@@ -141,7 +155,7 @@ def get_otp_from_imap(imap_server, imap_port, email_address, password, sender_em
     return None
 
 # ==============================================================================
-# 3. دالة الأتمتة الرئيسية عبر Selenium
+# 3. تشغيل الأتمتة السحابية
 # ==============================================================================
 def run_automation(params, log_box, progress_bar):
     progress_bar.progress(10, text="جاري إطلاق متصفح Chrome Headless...")

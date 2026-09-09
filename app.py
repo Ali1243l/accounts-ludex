@@ -55,11 +55,13 @@ def get_headless_driver(log_box=None):
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-setuid-sandbox")
     options.add_argument("--window-size=1920,1080")
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
     
-    # فحص مسارات Chromium المثبتة على سيرفرات Linux السحابية
+    # فحص مسارات Chromium المثبتة عبر packages.txt في سيرفرات Linux السحابية
     candidate_paths = [
         ("/usr/bin/chromium", "/usr/bin/chromedriver"),
         ("/usr/bin/chromium-browser", "/usr/lib/chromium-browser/chromedriver"),
@@ -69,12 +71,14 @@ def get_headless_driver(log_box=None):
     for chromepath, driverpath in candidate_paths:
         if os.path.exists(chromepath) and os.path.exists(driverpath):
             if log_box:
-                log_box.write(f"🔧 تشغيل مشغل المتصفح من المسار: `{driverpath}`")
+                log_box.write(f"✔ تم العثور على المتصفح السحابي: `{chromepath}` والمشغل: `{driverpath}`")
             options.binary_location = chromepath
             service = Service(executable_path=driverpath)
             return webdriver.Chrome(service=service, options=options)
 
-    # في حال التشغيل المحلي أو مع مدير Selenium المدمج
+    # في حال عدم وجود ملف packages.txt أو التشغيل المحلي
+    if log_box:
+        log_box.write("⚠️ لم يتم العثور على Chromium النظامي (`/usr/bin/chromium`)، جاري محاولة التشغيل المباشر...")
     return webdriver.Chrome(options=options)
 
 # ==============================================================================

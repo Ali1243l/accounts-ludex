@@ -9,6 +9,8 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
+from webdriver_manager.core.os_manager import ChromeType
 
 # ==============================================================================
 # إعدادات صفحة Streamlit
@@ -47,7 +49,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 1. إعداد متصفح Chrome بوضع الـ Headless (المناسب للتشغيل السحابي)
+# 1. إعداد متصفح Chrome بوضع الـ Headless المعتمد لسيرفرات Streamlit Cloud
 # ==============================================================================
 def get_headless_driver():
     options = Options()
@@ -59,8 +61,9 @@ def get_headless_driver():
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
     
+    # محاولة تشغيل مشغل Chromium السحابي
     try:
-        service = Service("/usr/bin/chromedriver")
+        service = Service(ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install())
         driver = webdriver.Chrome(service=service, options=options)
     except Exception:
         driver = webdriver.Chrome(options=options)
@@ -71,7 +74,7 @@ def get_headless_driver():
 # ==============================================================================
 def get_otp_from_imap(imap_server, imap_port, email_address, password, sender_email, otp_length=5, max_retries=15, delay_seconds=3, log_box=None):
     if log_box:
-        log_box.write(f"📡 [IMAP] جاري الاتصال بالخادم `{imap_server}:{imap_port}` للحساب (`{email_address}`)...")
+        log_box.write(f"📡 [IMAP] جاري الاتصال بالخادم \`{imap_server}:{imap_port}\` للحساب (\`{email_address}\`)...")
 
     for attempt in range(1, max_retries + 1):
         try:
@@ -98,12 +101,12 @@ def get_otp_from_imap(imap_server, imap_port, email_address, password, sender_em
                         else:
                             body = msg.get_payload(decode=True).decode(errors='ignore')
 
-                        pattern = rf'\b[A-Za-z0-9]{{{otp_length}}}\b'
+                        pattern = rf'\\b[A-Za-z0-9]{{{otp_length}}}\\b'
                         match = re.search(pattern, body)
                         if match:
                             otp_code = match.group(0)
                             if log_box:
-                                log_box.write(f"✔ **تم استخراج الرمز بنجاح:** `{otp_code}` (في المحاولة {attempt})")
+                                log_box.write(f"✔ **تم استخراج الرمز بنجاح:** \`{otp_code}\` (في المحاولة {attempt})")
                             mail.logout()
                             return otp_code
 
@@ -132,13 +135,13 @@ def run_automation(params, log_box, progress_bar):
 
         if params["site1_url"].strip():
             progress_bar.progress(25, text=f"فتح الموقع الأول: {params['site1_url']}...")
-            log_box.write(f"🌐 [المرحلة 1] جاري فتح الموقع الأول: `{params['site1_url']}`")
+            log_box.write(f"🌐 [المرحلة 1] جاري فتح الموقع الأول: \`{params['site1_url']}\`")
             driver.get(params["site1_url"])
             time.sleep(2)
             log_box.write("✔ [المرحلة 1] اكتملت خطوات الموقع الأول بنجاح.")
 
         progress_bar.progress(45, text=f"الانتقال للموقع الأساسي: {params['site2_url']}...")
-        log_box.write(f"🌐 [المرحلة 2] الانتقال للموقع الأساسي: `{params['site2_url']}`")
+        log_box.write(f"🌐 [المرحلة 2] الانتقال للموقع الأساسي: \`{params['site2_url']}\`")
         driver.get(params["site2_url"])
 
         log_box.write("🖱️ [الموقع 2] الضغط على زر القائمة...")
@@ -186,7 +189,7 @@ def run_automation(params, log_box, progress_bar):
         if not extracted_otp:
             raise Exception("فشل سحب رمز التحقق من البريد، تم إيقاف العملية.")
 
-        log_box.write(f"📥 [الموقع 2] حقن الرمز المستخرج [`{extracted_otp}`] في حقل التحقق...")
+        log_box.write(f"📥 [الموقع 2] حقن الرمز المستخرج [\`{extracted_otp}\`] في حقل التحقق...")
         code_input = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="forgot_login_code_form"]/div[3]/input')))
         code_input.clear()
         code_input.send_keys(extracted_otp)
@@ -196,14 +199,14 @@ def run_automation(params, log_box, progress_bar):
         email_reset_btn = wait.until(EC.element_to_be_clickable((By.XPATH, '//*[@id="email_reset"]')))
         email_reset_btn.click()
 
-        log_box.write(f"✍️ [الموقع 2] كتابة الإيميل الجديد: `{params['new_email']}`")
+        log_box.write(f"✍️ [الموقع 2] كتابة الإيميل الجديد: \`{params['new_email']}\`")
         new_email_input = wait.until(EC.presence_of_element_located((By.XPATH, '//*[@id="change_email_area"]/input')))
         new_email_input.clear()
         new_email_input.send_keys(params['new_email'])
 
         progress_bar.progress(100, text="اكتملت جميع العمليات بنجاح!")
         st.balloons()
-        st.success(f"🎉 **تمت العملية بنجاح!** الكود المسحوب: `{extracted_otp}` - تم تعيين الإيميل الجديد: `{params['new_email']}`")
+        st.success(f"🎉 **تمت العملية بنجاح!** الكود المسحوب: \`{extracted_otp}\` - تم تعيين الإيميل الجديد: \`{params['new_email']}\`")
 
     except Exception as e:
         progress_bar.progress(100, text="حدث خطأ أثناء التنفيذ")
